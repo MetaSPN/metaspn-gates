@@ -1,0 +1,22 @@
+version = 1
+requires-python = ">=3.11"
+
+[[package]]
+name = "metaspn-gates"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "metaspn-schemas" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "metaspn-schemas", specifier = "==0.1.0" }]
+
+[[package]]
+name = "metaspn-schemas"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5d/ad/1d4604ab176d8b8ae84f05e74a287ffdedba8bfae9e2f5ddd307cea9c3f6/metaspn_schemas-0.1.0.tar.gz", hash = "sha256:81d10cf6baa3fdd8dfeda3db5909aa3d69df2a7b16cf3ad523d4754e2ab74ff8", size = 9526 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4b/20/216d8f835962d77be4a0e0388f2b45e663f2c08aed13fd4fe2261808c1db/metaspn_schemas-0.1.0-py3-none-any.whl", hash = "sha256:53d18b4aab0c8205494ddb77c2fda82d17b5075b85450f7d0890a88f40cc5f50", size = 10241 },
+]

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metaspn-gates"
+version = "0.1.0"
+description = "Config-driven gate and state machine evaluator for MetaSPN entity pipelines"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "LicenseRef-Proprietary"
+keywords = ["metaspn", "state-machine", "gates", "workflow"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "metaspn-schemas==0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/leoguinan/metaspn-gates"
+Repository = "https://github.com/leoguinan/metaspn-gates"
+Issues = "https://github.com/leoguinan/metaspn-gates/issues"
+
+[tool.setuptools]
+packages = ["metaspn_gates"]
