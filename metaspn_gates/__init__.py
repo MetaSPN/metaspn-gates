@@ -19,6 +19,7 @@ from .config import (
 from .evaluator import Evaluator, evaluate_gates
 from .schemas import schemas_available
 from .applier import apply_decisions
+from .explain import format_decision_trace
 from .learning import (
     AttemptOutcomeEvaluation,
     CalibrationProposal,
@@ -49,4 +50,5 @@ __all__ = [
     "classify_failure_reason",
     "evaluate_attempt_outcomes",
     "generate_calibration_proposals",
+    "format_decision_trace",
 ]

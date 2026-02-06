@@ -1,0 +1,122 @@
+{
+  "config_version": "demo.v1",
+  "gates": [
+    {
+      "gate_id": "demo.seen_to_observed",
+      "version": "1",
+      "track": "DEMO",
+      "from": "SEEN",
+      "to": "OBSERVED",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.entity_resolved",
+          "field": "ingestion.resolved_entity_id",
+          "op": "exists"
+        }
+      ],
+      "soft_thresholds": [
+        {
+          "threshold_id": "st.profile_confidence",
+          "field": "profile.confidence",
+          "op": "gte",
+          "value": 0.7
+        }
+      ],
+      "min_soft_passed": 1,
+      "cooldown_seconds": 0,
+      "enqueue_tasks_on_pass": ["enrich_profile"],
+      "failure_taxonomy": {
+        "hr.entity_resolved": "missing_resolved_entity"
+      }
+    },
+    {
+      "gate_id": "demo.observed_to_shortlisted",
+      "version": "1",
+      "track": "DEMO",
+      "from": "OBSERVED",
+      "to": "SHORTLISTED",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.profile_handle",
+          "field": "profile.handle",
+          "op": "exists"
+        }
+      ],
+      "soft_thresholds": [
+        {
+          "threshold_id": "st.quality_score",
+          "field": "scores.quality_score",
+          "op": "gte",
+          "value": 0.8
+        }
+      ],
+      "min_soft_passed": 1,
+      "cooldown_seconds": 300,
+      "cooldown_on": "attempt",
+      "enqueue_tasks_on_pass": ["score_entity"],
+      "failure_taxonomy": {
+        "hr.profile_handle": "missing_profile_handle"
+      }
+    },
+    {
+      "gate_id": "demo.shortlisted_to_ready",
+      "version": "1",
+      "track": "DEMO",
+      "from": "SHORTLISTED",
+      "to": "READY",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.no_draft",
+          "field": "demo.draft_enabled",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "soft_thresholds": [
+        {
+          "threshold_id": "st.readiness",
+          "field": "scores.readiness_score",
+          "op": "gte",
+          "value": 0.85
+        }
+      ],
+      "min_soft_passed": 1,
+      "cooldown_seconds": 600,
+      "cooldown_on": "pass",
+      "enqueue_tasks_on_pass": [],
+      "failure_taxonomy": {
+        "hr.no_draft": "draft_enabled_path"
+      }
+    },
+    {
+      "gate_id": "demo.shortlisted_to_ready_with_draft",
+      "version": "1",
+      "track": "DEMO",
+      "from": "SHORTLISTED",
+      "to": "READY",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.draft_enabled",
+          "field": "demo.draft_enabled",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "soft_thresholds": [
+        {
+          "threshold_id": "st.readiness",
+          "field": "scores.readiness_score",
+          "op": "gte",
+          "value": 0.85
+        }
+      ],
+      "min_soft_passed": 1,
+      "cooldown_seconds": 600,
+      "cooldown_on": "pass",
+      "enqueue_tasks_on_pass": ["draft_message"],
+      "failure_taxonomy": {
+        "hr.draft_enabled": "draft_disabled_path"
+      }
+    }
+  ]
+}

@@ -101,6 +101,22 @@ These produce deterministic outputs for:
 - No threshold or cooldown values are auto-applied silently.
 - Every proposal has `auto_apply=False` and must be explicitly approved by a human/operator workflow.
 
+## Demo Support
+
+Demo fixture:
+
+- `/Users/leoguinan/MetaSPN/metaspn-gates/tests/fixtures/demo_state_machine_config.json`
+
+Demo progression:
+
+- `SEEN -> OBSERVED` enqueues `enrich_profile`
+- `OBSERVED -> SHORTLISTED` enqueues `score_entity`
+- `SHORTLISTED -> READY` optionally enqueues `draft_message` when `features.demo.draft_enabled=true`
+
+Digest explainability helper:
+
+- `format_decision_trace(decisions)` returns rows with `passed`, `blocked`, and `reason`.
+
 ## Release
 
 - GitHub Actions workflow: `/Users/leoguinan/MetaSPN/metaspn-gates/.github/workflows/publish.yml`
