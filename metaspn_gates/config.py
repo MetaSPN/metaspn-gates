@@ -12,6 +12,10 @@ class ConfigError(ValueError):
     pass
 
 
+SCHEMAS_PARSE_HOOK = "parse_state_machine_config_yaml"
+SCHEMAS_VALIDATE_HOOK = "validate_state_machine_config"
+
+
 def _mapping_from_object(value: Any) -> Mapping[str, Any] | None:
     if isinstance(value, Mapping):
         return value
@@ -36,6 +40,15 @@ def schemas_backend_available() -> bool:
     return _load_schemas_backend() is not None
 
 
+def schemas_contract_available() -> bool:
+    backend = _load_schemas_backend()
+    if backend is None:
+        return False
+    return callable(getattr(backend, SCHEMAS_PARSE_HOOK, None)) and callable(
+        getattr(backend, SCHEMAS_VALIDATE_HOOK, None)
+    )
+
+
 def _call_parser(fn: Callable[..., Any], raw: str, path: Path) -> Any:
     last_exc: Exception | None = None
     for args in ((raw, str(path)), (raw,), (str(path),), ()):
@@ -49,48 +62,19 @@ def _call_parser(fn: Callable[..., Any], raw: str, path: Path) -> Any:
 
 
 def _parse_with_schemas_backend(raw: str, path: Path, backend: Any) -> Mapping[str, Any] | None:
-    parser_names = (
-        "parse_state_machine_config_yaml",
-        "parse_state_machine_yaml",
-        "load_state_machine_config",
-        "load_yaml",
-        "parse_yaml",
-    )
-    for name in parser_names:
-        fn = getattr(backend, name, None)
-        if callable(fn):
-            parsed = _call_parser(fn, raw, path)
-            mapping = _mapping_from_object(parsed)
-            if mapping is not None:
-                return mapping
-    return None
+    parse_fn = getattr(backend, SCHEMAS_PARSE_HOOK, None)
+    if not callable(parse_fn):
+        return None
+    parsed = _call_parser(parse_fn, raw, path)
+    return _mapping_from_object(parsed)
 
 
 def _validate_with_schemas_backend(payload: Mapping[str, Any], backend: Any) -> Mapping[str, Any]:
-    validate_fn = getattr(backend, "validate_state_machine_config", None)
-    if callable(validate_fn):
-        try:
-            validated = validate_fn(payload)
-        except Exception as exc:  # pragma: no cover - backend-defined exception types
-            raise ConfigError(f"metaspn_schemas validation failed: {exc}") from exc
-        mapping = _mapping_from_object(validated)
-        if mapping is not None:
-            return mapping
+    validate_fn = getattr(backend, SCHEMAS_VALIDATE_HOOK, None)
+    if not callable(validate_fn):
         return payload
-
-    schema_cls = getattr(backend, "StateMachineConfig", None)
-    if schema_cls is None:
-        return payload
-
-    model_validate = getattr(schema_cls, "model_validate", None)
-    parse_obj = getattr(schema_cls, "parse_obj", None)
     try:
-        if callable(model_validate):
-            validated = model_validate(payload)
-        elif callable(parse_obj):
-            validated = parse_obj(payload)
-        else:
-            return payload
+        validated = validate_fn(payload)
     except Exception as exc:  # pragma: no cover - backend-defined exception types
         raise ConfigError(f"metaspn_schemas validation failed: {exc}") from exc
 
@@ -223,7 +207,7 @@ def parse_state_machine_config(payload: Mapping[str, Any]) -> StateMachineConfig
 
 
 def load_state_machine_config(path: str | Path) -> StateMachineConfig:
-    """Loads config using metaspn_schemas when available, otherwise JSON fallback."""
+    """Loads config using metaspn_schemas contract hooks when available, otherwise JSON fallback."""
 
     path = Path(path)
     raw = path.read_text(encoding="utf-8")

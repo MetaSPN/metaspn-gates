@@ -7,7 +7,12 @@ from tempfile import TemporaryDirectory
 from unittest import mock
 
 from metaspn_gates import apply_decisions, evaluate_gates, parse_state_machine_config
-from metaspn_gates.config import ConfigError, load_state_machine_config, schemas_backend_available
+from metaspn_gates.config import (
+    ConfigError,
+    load_state_machine_config,
+    schemas_backend_available,
+    schemas_contract_available,
+)
 
 
 BASE_CONFIG = {
@@ -186,7 +191,7 @@ class GateTests(unittest.TestCase):
     def test_load_state_machine_config_uses_schemas_backend(self) -> None:
         class FakeSchemas:
             @staticmethod
-            def parse_yaml(raw: str) -> dict:
+            def parse_state_machine_config_yaml(raw: str) -> dict:
                 if "config_version: sm.v2" not in raw:
                     raise ValueError("unexpected input")
                 return {
@@ -201,6 +206,12 @@ class GateTests(unittest.TestCase):
                     ],
                 }
 
+            @staticmethod
+            def validate_state_machine_config(payload: dict) -> dict:
+                out = dict(payload)
+                out["config_version"] = "sm.v2.validated"
+                return out
+
         with mock.patch("metaspn_gates.config.importlib.import_module", return_value=FakeSchemas):
             with TemporaryDirectory() as tmp:
                 path = Path(tmp) / "config.yaml"
@@ -214,7 +225,7 @@ class GateTests(unittest.TestCase):
                     encoding="utf-8",
                 )
                 config = load_state_machine_config(path)
-                self.assertEqual(config.config_version, "sm.v2")
+                self.assertEqual(config.config_version, "sm.v2.validated")
                 self.assertEqual(config.gates[0].version, "2")
 
     def test_schemas_backend_available_helper(self) -> None:
@@ -222,6 +233,22 @@ class GateTests(unittest.TestCase):
             self.assertTrue(schemas_backend_available())
         with mock.patch("metaspn_gates.config.importlib.import_module", side_effect=ImportError):
             self.assertFalse(schemas_backend_available())
+
+    def test_schemas_contract_available_helper(self) -> None:
+        class FakeSchemas:
+            @staticmethod
+            def parse_state_machine_config_yaml(raw: str) -> dict:
+                return {}
+
+            @staticmethod
+            def validate_state_machine_config(payload: dict) -> dict:
+                return payload
+
+        with mock.patch("metaspn_gates.config.importlib.import_module", return_value=FakeSchemas):
+            self.assertTrue(schemas_contract_available())
+
+        with mock.patch("metaspn_gates.config.importlib.import_module", return_value=object()):
+            self.assertFalse(schemas_contract_available())
 
     def test_parse_state_machine_config_runs_backend_validation(self) -> None:
         class FakeSchemas:

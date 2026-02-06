@@ -9,7 +9,13 @@ from .models import (
     HardRequirement,
     SoftThreshold,
 )
-from .config import ConfigError, load_state_machine_config, parse_state_machine_config, schemas_backend_available
+from .config import (
+    ConfigError,
+    load_state_machine_config,
+    parse_state_machine_config,
+    schemas_backend_available,
+    schemas_contract_available,
+)
 from .evaluator import Evaluator, evaluate_gates
 from .schemas import schemas_available
 from .applier import apply_decisions
@@ -28,6 +34,7 @@ __all__ = [
     "parse_state_machine_config",
     "load_state_machine_config",
     "schemas_backend_available",
+    "schemas_contract_available",
     "schemas_available",
     "ConfigError",
 ]
