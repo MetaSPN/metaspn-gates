@@ -71,6 +71,10 @@ def apply_decisions(
                     "kind": "task_enqueued",
                     "task_id": task,
                     "gate_id": decision.gate_id,
+                    "gate_version": decision.gate_version,
+                    "entity_id": new_state.get("entity_id"),
+                    "from_state": decision.from_state,
+                    "to_state": decision.to_state,
                     "caused_by": caused_by,
                     "timestamp": attempted.timestamp.isoformat(),
                 }

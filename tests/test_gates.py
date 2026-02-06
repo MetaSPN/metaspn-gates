@@ -61,6 +61,107 @@ BASE_CONFIG = {
 
 
 class GateTests(unittest.TestCase):
+    def test_m1_fixture_progression_is_deterministic(self) -> None:
+        fixture_path = Path(__file__).parent / "fixtures" / "m1_routing_state_machine_config.json"
+        config = load_state_machine_config(fixture_path)
+        now = datetime(2026, 2, 6, 0, 0, tzinfo=timezone.utc)
+
+        entity_state = {"entity_id": "ent-m1-01", "state": "SEEN", "track": "M1"}
+        features = {
+            "ingestion": {"resolved_entity_id": "ent-m1-01"},
+            "profile": {"handle": "m1_user", "confidence": 0.91},
+            "social": {"followers": 3200},
+            "scores": {"routing_readiness": 0.93, "profile_quality": 0.82},
+        }
+
+        seen_decisions_1 = evaluate_gates(config, entity_state, features, now)
+        seen_decisions_2 = evaluate_gates(config, entity_state, features, now)
+        self.assertEqual([(d.gate_id, d.passed) for d in seen_decisions_1], [(d.gate_id, d.passed) for d in seen_decisions_2])
+        self.assertEqual(seen_decisions_1[0].gate_id, "m1.seen_to_observed")
+        state_1, emissions_1 = apply_decisions(entity_state, seen_decisions_1, caused_by="sig-m1")
+        self.assertEqual(state_1["state"], "OBSERVED")
+        self.assertEqual(emissions_1[0]["task_id"], "task.m1.capture_observation")
+
+        obs_decisions = evaluate_gates(config, state_1, features, now)
+        self.assertEqual(obs_decisions[0].gate_id, "m1.observed_to_profiled")
+        state_2, emissions_2 = apply_decisions(state_1, obs_decisions, caused_by="sig-m1")
+        self.assertEqual(state_2["state"], "PROFILED")
+        self.assertEqual(emissions_2[0]["task_id"], "task.m1.build_profile")
+
+        prof_decisions = evaluate_gates(config, state_2, features, now)
+        self.assertEqual(prof_decisions[0].gate_id, "m1.profiled_to_qualified")
+        state_3, emissions_3 = apply_decisions(state_2, prof_decisions, caused_by="sig-m1")
+        self.assertEqual(state_3["state"], "QUALIFIED")
+        self.assertEqual(emissions_3[0]["task_id"], "task.m1.qualify_entity")
+
+        qual_decisions = evaluate_gates(config, state_3, features, now)
+        self.assertEqual(qual_decisions[0].gate_id, "m1.qualified_to_routed")
+        state_4, emissions_4 = apply_decisions(state_3, qual_decisions, caused_by="sig-m1")
+        self.assertEqual(state_4["state"], "ROUTED")
+        self.assertEqual(emissions_4[0]["task_id"], "task.m1.route_entity")
+
+    def test_m1_cooldown_and_task_enqueue_behavior(self) -> None:
+        fixture_path = Path(__file__).parent / "fixtures" / "m1_routing_state_machine_config.json"
+        config = load_state_machine_config(fixture_path)
+        now = datetime(2026, 2, 6, 0, 0, tzinfo=timezone.utc)
+
+        entity_state = {
+            "entity_id": "ent-m1-02",
+            "state": "QUALIFIED",
+            "track": "M1",
+            "gate_cooldowns": {"m1.qualified_to_routed": (now - timedelta(minutes=1)).isoformat()},
+        }
+        features = {"scores": {"routing_readiness": 0.99}}
+
+        decisions = evaluate_gates(config, entity_state, features, now)
+        self.assertEqual(len(decisions), 1)
+        self.assertEqual(decisions[0].gate_id, "m1.qualified_to_routed")
+        self.assertFalse(decisions[0].passed)
+        self.assertEqual(decisions[0].reason, "cooldown_active")
+
+        new_state, emissions = apply_decisions(entity_state, decisions, caused_by="sig-m1-cooldown")
+        self.assertEqual(new_state["state"], "QUALIFIED")
+        self.assertEqual(emissions, [])
+        self.assertEqual(len(new_state["gate_attempts"]), 1)
+
+    def test_m1_routing_emission_contains_ops_worker_metadata(self) -> None:
+        fixture_path = Path(__file__).parent / "fixtures" / "m1_routing_state_machine_config.json"
+        config = load_state_machine_config(fixture_path)
+        now = datetime(2026, 2, 6, 0, 0, tzinfo=timezone.utc)
+        entity_state = {"entity_id": "ent-m1-03", "state": "QUALIFIED", "track": "M1"}
+        features = {"scores": {"routing_readiness": 0.95}}
+
+        decisions = evaluate_gates(config, entity_state, features, now)
+        self.assertEqual(decisions[0].gate_id, "m1.qualified_to_routed")
+        self.assertTrue(decisions[0].passed)
+
+        _, emissions = apply_decisions(entity_state, decisions, caused_by="sig-route")
+        self.assertEqual(len(emissions), 1)
+        emission = emissions[0]
+        for key in ("task_id", "gate_id", "gate_version", "entity_id", "from_state", "to_state", "caused_by", "timestamp"):
+            self.assertIn(key, emission)
+        self.assertEqual(emission["entity_id"], "ent-m1-03")
+        self.assertEqual(emission["from_state"], "QUALIFIED")
+        self.assertEqual(emission["to_state"], "ROUTED")
+
+    def test_load_m1_fixture_with_schemas_backend_present_is_stable(self) -> None:
+        spec = importlib.util.find_spec("metaspn_schemas")
+        if spec is None:
+            self.skipTest("metaspn_schemas is not installed in this environment")
+
+        fixture_path = Path(__file__).parent / "fixtures" / "m1_routing_state_machine_config.json"
+        config = load_state_machine_config(fixture_path)
+        self.assertEqual(config.config_version, "m1.v1")
+        self.assertEqual(
+            {g.gate_id for g in config.gates},
+            {
+                "m1.seen_to_observed",
+                "m1.observed_to_profiled",
+                "m1.profiled_to_qualified",
+                "m1.qualified_to_routed",
+            },
+        )
+
     def test_m0_fixture_progression_seen_observed_profiled(self) -> None:
         fixture_path = Path(__file__).parent / "fixtures" / "m0_state_machine_config.json"
         config = load_state_machine_config(fixture_path)
@@ -123,7 +224,7 @@ class GateTests(unittest.TestCase):
 
         _, emissions = apply_decisions(entity_state, decisions, caused_by="sig-contract")
         self.assertEqual(len(emissions), 1)
-        for key in ("kind", "task_id", "gate_id", "caused_by", "timestamp"):
+        for key in ("kind", "task_id", "gate_id", "gate_version", "entity_id", "from_state", "to_state", "caused_by", "timestamp"):
             self.assertIn(key, emissions[0])
         self.assertEqual(emissions[0]["kind"], "task_enqueued")
         self.assertEqual(emissions[0]["gate_id"], decision.gate_id)

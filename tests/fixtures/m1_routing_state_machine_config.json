@@ -1,0 +1,109 @@
+{
+  "config_version": "m1.v1",
+  "gates": [
+    {
+      "gate_id": "m1.seen_to_observed",
+      "version": "1",
+      "track": "M1",
+      "from": "SEEN",
+      "to": "OBSERVED",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.resolved_entity",
+          "field": "ingestion.resolved_entity_id",
+          "op": "exists"
+        }
+      ],
+      "cooldown_seconds": 0,
+      "enqueue_tasks_on_pass": ["task.m1.capture_observation"],
+      "failure_taxonomy": {
+        "hr.resolved_entity": "missing_resolved_entity"
+      }
+    },
+    {
+      "gate_id": "m1.observed_to_profiled",
+      "version": "1",
+      "track": "M1",
+      "from": "OBSERVED",
+      "to": "PROFILED",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.profile_handle",
+          "field": "profile.handle",
+          "op": "exists"
+        }
+      ],
+      "soft_thresholds": [
+        {
+          "threshold_id": "st.profile_confidence",
+          "field": "profile.confidence",
+          "op": "gte",
+          "value": 0.7
+        }
+      ],
+      "min_soft_passed": 1,
+      "cooldown_seconds": 0,
+      "enqueue_tasks_on_pass": ["task.m1.build_profile"],
+      "failure_taxonomy": {
+        "hr.profile_handle": "missing_profile_handle"
+      }
+    },
+    {
+      "gate_id": "m1.profiled_to_qualified",
+      "version": "1",
+      "track": "M1",
+      "from": "PROFILED",
+      "to": "QUALIFIED",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.followers_floor",
+          "field": "social.followers",
+          "op": "gte",
+          "value": 1000
+        }
+      ],
+      "soft_thresholds": [
+        {
+          "threshold_id": "st.routing_readiness",
+          "field": "scores.routing_readiness",
+          "op": "gte",
+          "value": 0.8
+        },
+        {
+          "threshold_id": "st.profile_quality",
+          "field": "scores.profile_quality",
+          "op": "gte",
+          "value": 0.75
+        }
+      ],
+      "min_soft_passed": 2,
+      "cooldown_seconds": 300,
+      "cooldown_on": "attempt",
+      "enqueue_tasks_on_pass": ["task.m1.qualify_entity"],
+      "failure_taxonomy": {
+        "hr.followers_floor": "insufficient_followers"
+      }
+    },
+    {
+      "gate_id": "m1.qualified_to_routed",
+      "version": "1",
+      "track": "M1",
+      "from": "QUALIFIED",
+      "to": "ROUTED",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.readiness_for_route",
+          "field": "scores.routing_readiness",
+          "op": "gte",
+          "value": 0.9
+        }
+      ],
+      "cooldown_seconds": 900,
+      "cooldown_on": "pass",
+      "enqueue_tasks_on_pass": ["task.m1.route_entity"],
+      "failure_taxonomy": {
+        "hr.readiness_for_route": "not_route_ready"
+      }
+    }
+  ]
+}

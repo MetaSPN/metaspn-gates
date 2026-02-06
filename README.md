@@ -44,6 +44,24 @@ Reference fixture:
 
 - `/Users/leoguinan/MetaSPN/metaspn-gates/tests/fixtures/m0_state_machine_config.json`
 
+## M1 Required Keys
+
+For the M1 routing progression (`SEEN -> OBSERVED -> PROFILED -> QUALIFIED -> ROUTED`) the minimum keys are:
+
+- `entity_state.state`: one of `SEEN`, `OBSERVED`, `PROFILED`, `QUALIFIED`
+- `entity_state.track`: `M1`
+- `entity_state.entity_id`: required for emitted task metadata
+- `features.ingestion.resolved_entity_id`: required for `SEEN -> OBSERVED`
+- `features.profile.handle`: required for `OBSERVED -> PROFILED`
+- `features.profile.confidence`: thresholded for `OBSERVED -> PROFILED`
+- `features.social.followers`: required floor for `PROFILED -> QUALIFIED`
+- `features.scores.routing_readiness`: required for `PROFILED -> QUALIFIED` and `QUALIFIED -> ROUTED`
+- `features.scores.profile_quality`: thresholded for `PROFILED -> QUALIFIED`
+
+M1 reference fixture:
+
+- `/Users/leoguinan/MetaSPN/metaspn-gates/tests/fixtures/m1_routing_state_machine_config.json`
+
 ## Release
 
 - GitHub Actions workflow: `/Users/leoguinan/MetaSPN/metaspn-gates/.github/workflows/publish.yml`
