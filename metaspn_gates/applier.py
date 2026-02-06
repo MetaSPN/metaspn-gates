@@ -73,9 +73,13 @@ def apply_decisions(
                 feature_snapshot = attempted.snapshot.get("feature_snapshot")
                 context = feature_snapshot.get("context", {}) if isinstance(feature_snapshot, Mapping) else {}
                 scores = feature_snapshot.get("scores", {}) if isinstance(feature_snapshot, Mapping) else {}
+                token = feature_snapshot.get("token", {}) if isinstance(feature_snapshot, Mapping) else {}
                 channel = context.get("channel")
                 playbook = context.get("playbook")
                 recommendation_score = scores.get("recommendation_score")
+                token_address = token.get("address")
+                chain = token.get("chain")
+                symbol = token.get("symbol")
                 base_emission: dict[str, Any] = {
                     "kind": "task_enqueued",
                     "task_id": task,
@@ -87,11 +91,20 @@ def apply_decisions(
                     "channel": channel,
                     "playbook": playbook,
                     "recommendation_score": recommendation_score,
+                    "token_address": token_address,
+                    "chain": chain,
+                    "symbol": symbol,
                     "caused_by": caused_by,
                     "timestamp": attempted.timestamp.isoformat(),
                     "worker_metadata": {
                         "drafter": {"entity_id": new_state.get("entity_id"), "channel": channel, "playbook": playbook},
                         "digest": {"entity_id": new_state.get("entity_id"), "channel": channel, "playbook": playbook},
+                        "token": {
+                            "entity_id": new_state.get("entity_id"),
+                            "token_address": token_address,
+                            "chain": chain,
+                            "symbol": symbol,
+                        },
                     },
                 }
                 if use_schema_envelopes and schemas_available():

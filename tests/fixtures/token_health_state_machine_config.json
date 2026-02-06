@@ -1,0 +1,90 @@
+{
+  "config_version": "token.v1",
+  "gates": [
+    {
+      "gate_id": "token.candidate_to_watchlisted",
+      "version": "1",
+      "track": "TOKEN",
+      "from": "CANDIDATE",
+      "to": "WATCHLISTED",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.holder_count",
+          "field": "token.holder_count",
+          "op": "gte",
+          "value": 200
+        },
+        {
+          "requirement_id": "hr.creator_behavior",
+          "field": "token.creator_behavior_risk",
+          "op": "lte",
+          "value": 0.4
+        }
+      ],
+      "soft_thresholds": [
+        {
+          "threshold_id": "st.credibility",
+          "field": "scores.credibility",
+          "op": "gte",
+          "value": 0.7
+        },
+        {
+          "threshold_id": "st.organic_volume",
+          "field": "scores.organic_volume",
+          "op": "gte",
+          "value": 0.65
+        },
+        {
+          "threshold_id": "st.concentration",
+          "field": "scores.concentration",
+          "op": "lte",
+          "value": 0.5
+        }
+      ],
+      "min_soft_passed": 2,
+      "cooldown_seconds": 300,
+      "cooldown_on": "attempt",
+      "enqueue_tasks_on_pass": ["token.enrich_profile"],
+      "failure_taxonomy": {
+        "hr.holder_count": "insufficient_holders",
+        "hr.creator_behavior": "creator_risk_high"
+      }
+    },
+    {
+      "gate_id": "token.watchlisted_to_promising",
+      "version": "1",
+      "track": "TOKEN",
+      "from": "WATCHLISTED",
+      "to": "PROMISING",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.credibility_floor",
+          "field": "scores.credibility",
+          "op": "gte",
+          "value": 0.8
+        }
+      ],
+      "soft_thresholds": [
+        {
+          "threshold_id": "st.organic_volume",
+          "field": "scores.organic_volume",
+          "op": "gte",
+          "value": 0.75
+        },
+        {
+          "threshold_id": "st.concentration",
+          "field": "scores.concentration",
+          "op": "lte",
+          "value": 0.45
+        }
+      ],
+      "min_soft_passed": 2,
+      "cooldown_seconds": 900,
+      "cooldown_on": "pass",
+      "enqueue_tasks_on_pass": ["token.route_review"],
+      "failure_taxonomy": {
+        "hr.credibility_floor": "credibility_too_low"
+      }
+    }
+  ]
+}

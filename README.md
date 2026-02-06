@@ -117,6 +117,23 @@ Digest explainability helper:
 
 - `format_decision_trace(decisions)` returns rows with `passed`, `blocked`, and `reason`.
 
+## Token Health Support
+
+Token fixture:
+
+- `/Users/leoguinan/MetaSPN/metaspn-gates/tests/fixtures/token_health_state_machine_config.json`
+
+Token minimum keys:
+
+- `entity_state.state`: `CANDIDATE` or `WATCHLISTED`
+- `entity_state.track`: `TOKEN`
+- `features.token.holder_count`: hard requirement floor
+- `features.token.creator_behavior_risk`: hard requirement ceiling
+- `features.scores.credibility`: threshold for both gates
+- `features.scores.organic_volume`: soft threshold
+- `features.scores.concentration`: soft threshold
+- `features.token.address`, `features.token.chain`, `features.token.symbol`: copied into task emission metadata for token workers
+
 ## Release
 
 - GitHub Actions workflow: `/Users/leoguinan/MetaSPN/metaspn-gates/.github/workflows/publish.yml`
