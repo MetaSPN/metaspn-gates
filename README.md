@@ -24,7 +24,7 @@
 
 - `load_state_machine_config` can use `metaspn_schemas` parsing/validation hooks when exposed by that package version.
 - Canonical schema hooks:
-  - parser: `parse_state_machine_config_yaml`
+  - parser: `parse_state_machine_config`
   - validator: `validate_state_machine_config`
 - If `metaspn_schemas` is unavailable, it falls back to JSON parsing only.
 - Current dependency target: `metaspn-schemas>=0.1.0,<0.2.0`.

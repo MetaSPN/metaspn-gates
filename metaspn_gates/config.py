@@ -12,7 +12,7 @@ class ConfigError(ValueError):
     pass
 
 
-SCHEMAS_PARSE_HOOK = "parse_state_machine_config_yaml"
+SCHEMAS_PARSE_HOOK = "parse_state_machine_config"
 SCHEMAS_VALIDATE_HOOK = "validate_state_machine_config"
 
 

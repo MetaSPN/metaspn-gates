@@ -191,7 +191,7 @@ class GateTests(unittest.TestCase):
     def test_load_state_machine_config_uses_schemas_backend(self) -> None:
         class FakeSchemas:
             @staticmethod
-            def parse_state_machine_config_yaml(raw: str) -> dict:
+            def parse_state_machine_config(raw: str) -> dict:
                 if "config_version: sm.v2" not in raw:
                     raise ValueError("unexpected input")
                 return {
@@ -237,7 +237,7 @@ class GateTests(unittest.TestCase):
     def test_schemas_contract_available_helper(self) -> None:
         class FakeSchemas:
             @staticmethod
-            def parse_state_machine_config_yaml(raw: str) -> dict:
+            def parse_state_machine_config(raw: str) -> dict:
                 return {}
 
             @staticmethod
