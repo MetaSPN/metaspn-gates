@@ -81,6 +81,26 @@ M2 reference fixture:
 
 - `/Users/leoguinan/MetaSPN/metaspn-gates/tests/fixtures/m2_recommendation_state_machine_config.json`
 
+## M3 Learning Outputs
+
+Learning helpers are exposed for reviewable gate analytics artifacts:
+
+- `evaluate_attempt_outcomes(...)`
+- `classify_failure_reason(...)`
+- `generate_calibration_proposals(...)`
+
+These produce deterministic outputs for:
+
+- moved-too-early detection
+- false-negative/false-positive classification
+- calibration recommendations (threshold/cooldown direction hints)
+
+### Calibration Safety Constraints
+
+- Calibration outputs are proposal-only artifacts.
+- No threshold or cooldown values are auto-applied silently.
+- Every proposal has `auto_apply=False` and must be explicitly approved by a human/operator workflow.
+
 ## Release
 
 - GitHub Actions workflow: `/Users/leoguinan/MetaSPN/metaspn-gates/.github/workflows/publish.yml`
