@@ -21,6 +21,7 @@ def apply_decisions(
     attempts = new_state.setdefault("gate_attempts", [])
     applied = new_state.setdefault("transitions_applied", [])
     cooldowns = new_state.setdefault("gate_cooldowns", {})
+    scoped_cooldowns = new_state.setdefault("gate_cooldowns_scoped", {})
 
     if not isinstance(attempts, list):
         raise ValueError("entity_state.gate_attempts must be a list when present")
@@ -28,6 +29,8 @@ def apply_decisions(
         raise ValueError("entity_state.transitions_applied must be a list when present")
     if not isinstance(cooldowns, dict):
         raise ValueError("entity_state.gate_cooldowns must be an object when present")
+    if not isinstance(scoped_cooldowns, dict):
+        raise ValueError("entity_state.gate_cooldowns_scoped must be an object when present")
 
     for decision in decisions:
         attempted = decision.transition_attempted
@@ -67,6 +70,12 @@ def apply_decisions(
             )
 
             for task in decision.enqueue_tasks_on_pass:
+                feature_snapshot = attempted.snapshot.get("feature_snapshot")
+                context = feature_snapshot.get("context", {}) if isinstance(feature_snapshot, Mapping) else {}
+                scores = feature_snapshot.get("scores", {}) if isinstance(feature_snapshot, Mapping) else {}
+                channel = context.get("channel")
+                playbook = context.get("playbook")
+                recommendation_score = scores.get("recommendation_score")
                 base_emission: dict[str, Any] = {
                     "kind": "task_enqueued",
                     "task_id": task,
@@ -75,8 +84,15 @@ def apply_decisions(
                     "entity_id": new_state.get("entity_id"),
                     "from_state": decision.from_state,
                     "to_state": decision.to_state,
+                    "channel": channel,
+                    "playbook": playbook,
+                    "recommendation_score": recommendation_score,
                     "caused_by": caused_by,
                     "timestamp": attempted.timestamp.isoformat(),
+                    "worker_metadata": {
+                        "drafter": {"entity_id": new_state.get("entity_id"), "channel": channel, "playbook": playbook},
+                        "digest": {"entity_id": new_state.get("entity_id"), "channel": channel, "playbook": playbook},
+                    },
                 }
                 if use_schema_envelopes and schemas_available():
                     entity_id = new_state.get("entity_id")
@@ -96,6 +112,12 @@ def apply_decisions(
                 emissions.append(base_emission)
 
         if decision.cooldown_on == "attempt" or (decision.cooldown_on == "pass" and decision.passed):
-            cooldowns[decision.gate_id] = decision.transition_attempted.timestamp.isoformat()
+            if decision.cooldown_scope == "entity" or not decision.cooldown_scope_key:
+                cooldowns[decision.gate_id] = decision.transition_attempted.timestamp.isoformat()
+            else:
+                gate_scoped = scoped_cooldowns.setdefault(decision.gate_id, {})
+                if not isinstance(gate_scoped, dict):
+                    raise ValueError("entity_state.gate_cooldowns_scoped[gate_id] must be an object when present")
+                gate_scoped[decision.cooldown_scope_key] = decision.transition_attempted.timestamp.isoformat()
 
     return new_state, emissions

@@ -184,6 +184,10 @@ def parse_state_machine_config(payload: Mapping[str, Any]) -> StateMachineConfig
         if cooldown_on not in {"pass", "attempt"}:
             raise ConfigError("cooldown_on must be either 'pass' or 'attempt'")
 
+        cooldown_scope = gate.get("cooldown_scope", "entity")
+        if cooldown_scope not in {"entity", "channel", "playbook", "channel_playbook"}:
+            raise ConfigError("cooldown_scope must be one of: entity, channel, playbook, channel_playbook")
+
         min_soft_passed = gate.get("min_soft_passed")
         if min_soft_passed is not None and (not isinstance(min_soft_passed, int) or min_soft_passed < 0):
             raise ConfigError("min_soft_passed must be a non-negative integer when provided")
@@ -199,6 +203,10 @@ def parse_state_machine_config(payload: Mapping[str, Any]) -> StateMachineConfig
             min_soft_passed=min_soft_passed,
             cooldown_seconds=cooldown_seconds,
             cooldown_on=cooldown_on,
+            cooldown_scope=cooldown_scope,
+            cooldown_channel_field=str(gate.get("cooldown_channel_field", "context.channel")),
+            cooldown_playbook_field=str(gate.get("cooldown_playbook_field", "context.playbook")),
+            suppression_field=gate.get("suppression_field"),
             enqueue_tasks_on_pass=tuple(raw_tasks),
             failure_taxonomy={str(k): str(v) for k, v in raw_taxonomy.items()},
         )

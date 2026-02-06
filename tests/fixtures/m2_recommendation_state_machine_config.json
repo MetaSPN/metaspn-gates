@@ -1,0 +1,69 @@
+{
+  "config_version": "m2.v1",
+  "gates": [
+    {
+      "gate_id": "m2.qualified_to_recommendable",
+      "version": "1",
+      "track": "M2",
+      "from": "QUALIFIED",
+      "to": "RECOMMENDABLE",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.profile_ready",
+          "field": "profile.handle",
+          "op": "exists"
+        }
+      ],
+      "soft_thresholds": [
+        {
+          "threshold_id": "st.rec_score",
+          "field": "scores.recommendation_score",
+          "op": "gte",
+          "value": 0.8
+        },
+        {
+          "threshold_id": "st.intent_score",
+          "field": "scores.intent_score",
+          "op": "gte",
+          "value": 0.7
+        }
+      ],
+      "min_soft_passed": 2,
+      "cooldown_seconds": 1200,
+      "cooldown_on": "attempt",
+      "cooldown_scope": "channel_playbook",
+      "cooldown_channel_field": "context.channel",
+      "cooldown_playbook_field": "context.playbook",
+      "suppression_field": "context.suppress_recommendations",
+      "enqueue_tasks_on_pass": ["task.m2.generate_recommendation"],
+      "failure_taxonomy": {
+        "hr.profile_ready": "profile_not_ready"
+      }
+    },
+    {
+      "gate_id": "m2.recommendable_to_draft_ready",
+      "version": "1",
+      "track": "M2",
+      "from": "RECOMMENDABLE",
+      "to": "DRAFT_READY",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.rec_score_floor",
+          "field": "scores.recommendation_score",
+          "op": "gte",
+          "value": 0.9
+        }
+      ],
+      "cooldown_seconds": 1800,
+      "cooldown_on": "pass",
+      "cooldown_scope": "channel_playbook",
+      "cooldown_channel_field": "context.channel",
+      "cooldown_playbook_field": "context.playbook",
+      "suppression_field": "context.suppress_drafts",
+      "enqueue_tasks_on_pass": ["task.m2.create_draft_digest"],
+      "failure_taxonomy": {
+        "hr.rec_score_floor": "rec_score_too_low"
+      }
+    }
+  ]
+}

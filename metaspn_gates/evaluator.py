@@ -51,30 +51,63 @@ def _requirement_passed(source: Mapping[str, Any], field: str, op: str, value: A
 
 
 def _check_cooldown(gate: GateConfig, entity_state: Mapping[str, Any], now: datetime) -> bool:
+    active, _ = _check_cooldown_with_scope(gate, entity_state, {}, now)
+    return active
+
+
+def _resolve_cooldown_scope_key(gate: GateConfig, features: Mapping[str, Any]) -> str | None:
+    if gate.cooldown_scope == "entity":
+        return None
+
+    _, channel = _get_path(features, gate.cooldown_channel_field)
+    _, playbook = _get_path(features, gate.cooldown_playbook_field)
+
+    if gate.cooldown_scope == "channel":
+        return f"channel:{channel}" if channel is not None else None
+    if gate.cooldown_scope == "playbook":
+        return f"playbook:{playbook}" if playbook is not None else None
+    if gate.cooldown_scope == "channel_playbook":
+        if channel is None or playbook is None:
+            return None
+        return f"channel:{channel}|playbook:{playbook}"
+    return None
+
+
+def _check_cooldown_with_scope(
+    gate: GateConfig, entity_state: Mapping[str, Any], features: Mapping[str, Any], now: datetime
+) -> tuple[bool, str | None]:
     if gate.cooldown_seconds <= 0:
-        return False
+        return False, None
 
-    cooldowns = entity_state.get("gate_cooldowns")
-    if not isinstance(cooldowns, Mapping):
-        return False
+    scope_key = _resolve_cooldown_scope_key(gate, features)
+    raw_last = None
+    if gate.cooldown_scope == "entity" or scope_key is None:
+        cooldowns = entity_state.get("gate_cooldowns")
+        if isinstance(cooldowns, Mapping):
+            raw_last = cooldowns.get(gate.gate_id)
+    else:
+        scoped = entity_state.get("gate_cooldowns_scoped")
+        if isinstance(scoped, Mapping):
+            gate_scoped = scoped.get(gate.gate_id)
+            if isinstance(gate_scoped, Mapping):
+                raw_last = gate_scoped.get(scope_key)
 
-    raw_last = cooldowns.get(gate.gate_id)
     if raw_last is None:
-        return False
+        return False, scope_key
 
     if isinstance(raw_last, str):
         last_attempt = datetime.fromisoformat(raw_last)
     elif isinstance(raw_last, datetime):
         last_attempt = raw_last
     else:
-        return False
+        return False, scope_key
 
     if last_attempt.tzinfo is None:
         last_attempt = last_attempt.replace(tzinfo=timezone.utc)
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
 
-    return now < (last_attempt + timedelta(seconds=gate.cooldown_seconds))
+    return now < (last_attempt + timedelta(seconds=gate.cooldown_seconds)), scope_key
 
 
 def _matches_state(gate: GateConfig, entity_state: Mapping[str, Any]) -> bool:
@@ -113,7 +146,7 @@ def evaluate_gates(
         if not _matches_state(gate, entity_state):
             continue
 
-        cooldown_active = _check_cooldown(gate, entity_state, now)
+        cooldown_active, cooldown_scope_key = _check_cooldown_with_scope(gate, entity_state, features, now)
         passed = not cooldown_active
         reason: str | None = "cooldown_active" if cooldown_active else None
         failed_requirement_id: str | None = None
@@ -147,6 +180,12 @@ def evaluate_gates(
         if not passed and isinstance(override_reason, str) and override_reason:
             reason = override_reason
 
+        if passed and gate.suppression_field:
+            _, suppressed = _get_path(features, gate.suppression_field)
+            if bool(suppressed):
+                passed = False
+                reason = "suppressed"
+
         snapshot = {
             "feature_snapshot": deepcopy(dict(features)),
             "entity_snapshot": deepcopy(dict(entity_state)),
@@ -154,6 +193,8 @@ def evaluate_gates(
             "gate_version": gate.version,
             "timestamp": now.isoformat(),
             "cooldown_active": cooldown_active,
+            "cooldown_scope": gate.cooldown_scope,
+            "cooldown_scope_key": cooldown_scope_key,
         }
 
         transition_attempted = TransitionAttempted(
@@ -179,6 +220,8 @@ def evaluate_gates(
                 failed_requirement_id=failed_requirement_id,
                 cooldown_active=cooldown_active,
                 cooldown_on=gate.cooldown_on,
+                cooldown_scope=gate.cooldown_scope,
+                cooldown_scope_key=cooldown_scope_key,
                 enqueue_tasks_on_pass=gate.enqueue_tasks_on_pass,
                 transition_attempted=transition_attempted,
             )

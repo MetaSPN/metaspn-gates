@@ -61,6 +61,97 @@ BASE_CONFIG = {
 
 
 class GateTests(unittest.TestCase):
+    def test_m2_recommendation_progression_deterministic(self) -> None:
+        fixture_path = Path(__file__).parent / "fixtures" / "m2_recommendation_state_machine_config.json"
+        config = load_state_machine_config(fixture_path)
+        now = datetime(2026, 2, 6, 10, 0, tzinfo=timezone.utc)
+        entity_state = {"entity_id": "ent-m2-1", "state": "QUALIFIED", "track": "M2"}
+        features = {
+            "profile": {"handle": "m2handle"},
+            "scores": {"recommendation_score": 0.93, "intent_score": 0.81},
+            "context": {"channel": "email", "playbook": "digest_weekly", "suppress_recommendations": False, "suppress_drafts": False},
+        }
+
+        decisions_1 = evaluate_gates(config, entity_state, features, now)
+        decisions_2 = evaluate_gates(config, entity_state, features, now)
+        self.assertEqual([(d.gate_id, d.passed, d.reason) for d in decisions_1], [(d.gate_id, d.passed, d.reason) for d in decisions_2])
+        self.assertEqual(decisions_1[0].gate_id, "m2.qualified_to_recommendable")
+        self.assertTrue(decisions_1[0].passed)
+
+        state_1, emissions_1 = apply_decisions(entity_state, decisions_1, caused_by="sig-m2")
+        self.assertEqual(state_1["state"], "RECOMMENDABLE")
+        self.assertEqual(emissions_1[0]["task_id"], "task.m2.generate_recommendation")
+
+        decisions_3 = evaluate_gates(config, state_1, features, now)
+        self.assertEqual(decisions_3[0].gate_id, "m2.recommendable_to_draft_ready")
+        self.assertTrue(decisions_3[0].passed)
+        state_2, emissions_2 = apply_decisions(state_1, decisions_3, caused_by="sig-m2")
+        self.assertEqual(state_2["state"], "DRAFT_READY")
+        self.assertEqual(emissions_2[0]["task_id"], "task.m2.create_draft_digest")
+
+    def test_m2_channel_playbook_cooldown_suppresses_repeat_prompts(self) -> None:
+        fixture_path = Path(__file__).parent / "fixtures" / "m2_recommendation_state_machine_config.json"
+        config = load_state_machine_config(fixture_path)
+        now = datetime(2026, 2, 6, 10, 0, tzinfo=timezone.utc)
+        features = {
+            "profile": {"handle": "m2cool"},
+            "scores": {"recommendation_score": 0.95, "intent_score": 0.85},
+            "context": {"channel": "email", "playbook": "digest_weekly", "suppress_recommendations": False, "suppress_drafts": False},
+        }
+
+        start = {"entity_id": "ent-m2-2", "state": "QUALIFIED", "track": "M2"}
+        first_decisions = evaluate_gates(config, start, features, now)
+        post_first, _ = apply_decisions(start, first_decisions, caused_by="sig-first")
+
+        second = {"entity_id": "ent-m2-2", "state": "QUALIFIED", "track": "M2", "gate_cooldowns_scoped": post_first["gate_cooldowns_scoped"]}
+        second_decisions = evaluate_gates(config, second, features, now + timedelta(minutes=5))
+        self.assertFalse(second_decisions[0].passed)
+        self.assertEqual(second_decisions[0].reason, "cooldown_active")
+
+        other_channel = dict(features)
+        other_channel["context"] = dict(features["context"])
+        other_channel["context"]["channel"] = "sms"
+        third_decisions = evaluate_gates(config, second, other_channel, now + timedelta(minutes=5))
+        self.assertTrue(third_decisions[0].passed)
+
+    def test_m2_suppression_flags_prevent_low_value_tasks(self) -> None:
+        fixture_path = Path(__file__).parent / "fixtures" / "m2_recommendation_state_machine_config.json"
+        config = load_state_machine_config(fixture_path)
+        now = datetime(2026, 2, 6, 10, 0, tzinfo=timezone.utc)
+        entity_state = {"entity_id": "ent-m2-3", "state": "QUALIFIED", "track": "M2"}
+        features = {
+            "profile": {"handle": "m2sup"},
+            "scores": {"recommendation_score": 0.97, "intent_score": 0.87},
+            "context": {"channel": "email", "playbook": "digest_weekly", "suppress_recommendations": True, "suppress_drafts": False},
+        }
+
+        decisions = evaluate_gates(config, entity_state, features, now)
+        self.assertFalse(decisions[0].passed)
+        self.assertEqual(decisions[0].reason, "suppressed")
+        _, emissions = apply_decisions(entity_state, decisions, caused_by="sig-m2-sup")
+        self.assertEqual(emissions, [])
+
+    def test_m2_emissions_include_drafter_digest_metadata(self) -> None:
+        fixture_path = Path(__file__).parent / "fixtures" / "m2_recommendation_state_machine_config.json"
+        config = load_state_machine_config(fixture_path)
+        now = datetime(2026, 2, 6, 10, 0, tzinfo=timezone.utc)
+        entity_state = {"entity_id": "ent-m2-4", "state": "QUALIFIED", "track": "M2"}
+        features = {
+            "profile": {"handle": "m2meta"},
+            "scores": {"recommendation_score": 0.94, "intent_score": 0.79},
+            "context": {"channel": "email", "playbook": "digest_weekly", "suppress_recommendations": False, "suppress_drafts": False},
+        }
+
+        decisions = evaluate_gates(config, entity_state, features, now)
+        _, emissions = apply_decisions(entity_state, decisions, caused_by="sig-m2-meta")
+        emission = emissions[0]
+        self.assertEqual(emission["channel"], "email")
+        self.assertEqual(emission["playbook"], "digest_weekly")
+        self.assertEqual(emission["recommendation_score"], 0.94)
+        self.assertIn("worker_metadata", emission)
+        self.assertIn("drafter", emission["worker_metadata"])
+        self.assertIn("digest", emission["worker_metadata"])
+
     def test_m1_fixture_progression_is_deterministic(self) -> None:
         fixture_path = Path(__file__).parent / "fixtures" / "m1_routing_state_machine_config.json"
         config = load_state_machine_config(fixture_path)

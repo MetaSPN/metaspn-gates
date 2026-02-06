@@ -35,6 +35,10 @@ class GateConfig:
     min_soft_passed: int | None = None
     cooldown_seconds: int = 0
     cooldown_on: str = "pass"  # pass | attempt
+    cooldown_scope: str = "entity"  # entity | channel | playbook | channel_playbook
+    cooldown_channel_field: str = "context.channel"
+    cooldown_playbook_field: str = "context.playbook"
+    suppression_field: str | None = None
     enqueue_tasks_on_pass: tuple[str, ...] = field(default_factory=tuple)
     failure_taxonomy: Mapping[str, str] = field(default_factory=dict)
 
@@ -69,6 +73,8 @@ class GateDecision:
     failed_requirement_id: str | None
     cooldown_active: bool
     cooldown_on: str
+    cooldown_scope: str
+    cooldown_scope_key: str | None
     enqueue_tasks_on_pass: tuple[str, ...]
     transition_attempted: TransitionAttempted
 

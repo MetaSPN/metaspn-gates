@@ -62,6 +62,25 @@ M1 reference fixture:
 
 - `/Users/leoguinan/MetaSPN/metaspn-gates/tests/fixtures/m1_routing_state_machine_config.json`
 
+## M2 Required Keys
+
+For recommendation gating (`QUALIFIED -> RECOMMENDABLE -> DRAFT_READY`) the minimum keys are:
+
+- `entity_state.state`: `QUALIFIED` or `RECOMMENDABLE`
+- `entity_state.track`: `M2`
+- `entity_state.entity_id`: required for downstream task metadata
+- `features.profile.handle`: required recommendation eligibility hard requirement
+- `features.scores.recommendation_score`: recommendation and draft thresholds
+- `features.scores.intent_score`: recommendation eligibility threshold
+- `features.context.channel`: channel-scoped cooldown key
+- `features.context.playbook`: playbook-scoped cooldown key
+- `features.context.suppress_recommendations`: suppression flag for recommendation gate
+- `features.context.suppress_drafts`: suppression flag for draft gate
+
+M2 reference fixture:
+
+- `/Users/leoguinan/MetaSPN/metaspn-gates/tests/fixtures/m2_recommendation_state_machine_config.json`
+
 ## Release
 
 - GitHub Actions workflow: `/Users/leoguinan/MetaSPN/metaspn-gates/.github/workflows/publish.yml`
