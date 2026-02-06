@@ -24,11 +24,25 @@
 
 - `load_state_machine_config` can use `metaspn_schemas` parsing/validation hooks when exposed by that package version.
 - Canonical schema hooks:
-  - parser: `parse_state_machine_config`
+  - parser: `parse_state_machine_config` (mapping payload)
   - validator: `validate_state_machine_config`
 - If `metaspn_schemas` is unavailable, it falls back to JSON parsing only.
 - Current dependency target: `metaspn-schemas>=0.1.0,<0.2.0`.
 - `apply_decisions(..., use_schema_envelopes=True)` attaches schema-shaped payloads when `entity_state.entity_id` is present.
+
+## M0 Minimum Keys
+
+For the sample M0 progression (`SEEN -> OBSERVED -> PROFILED`) the minimum keys are:
+
+- `entity_state.state`: `SEEN` or `OBSERVED`
+- `entity_state.track`: `M0`
+- `features.ingestion.resolved_entity_id`: required for `SEEN -> OBSERVED`
+- `features.profile.handle`: required for `OBSERVED -> PROFILED`
+- `features.profile.confidence`: numeric threshold for `OBSERVED -> PROFILED` (sample gate uses `>= 0.7`)
+
+Reference fixture:
+
+- `/Users/leoguinan/MetaSPN/metaspn-gates/tests/fixtures/m0_state_machine_config.json`
 
 ## Release
 

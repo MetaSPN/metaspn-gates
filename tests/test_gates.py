@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib
+import json
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -59,6 +61,73 @@ BASE_CONFIG = {
 
 
 class GateTests(unittest.TestCase):
+    def test_m0_fixture_progression_seen_observed_profiled(self) -> None:
+        fixture_path = Path(__file__).parent / "fixtures" / "m0_state_machine_config.json"
+        config = load_state_machine_config(fixture_path)
+        now = datetime(2026, 2, 6, 0, 0, tzinfo=timezone.utc)
+
+        entity_state = {"entity_id": "ent-42", "state": "SEEN", "track": "M0"}
+        features = {
+            "ingestion": {"resolved_entity_id": "ent-42"},
+            "profile": {"handle": "neo", "confidence": 0.9},
+        }
+
+        first_decisions = evaluate_gates(config, entity_state, features, now)
+        self.assertEqual(len(first_decisions), 1)
+        self.assertEqual(first_decisions[0].gate_id, "m0.seen_to_observed")
+        self.assertTrue(first_decisions[0].passed)
+
+        state_after_first, first_emissions = apply_decisions(entity_state, first_decisions, caused_by="sig-m0")
+        self.assertEqual(state_after_first["state"], "OBSERVED")
+        self.assertEqual(first_emissions[0]["task_id"], "task.capture_observation")
+
+        second_decisions = evaluate_gates(config, state_after_first, features, now)
+        self.assertEqual(len(second_decisions), 1)
+        self.assertEqual(second_decisions[0].gate_id, "m0.observed_to_profiled")
+        self.assertTrue(second_decisions[0].passed)
+
+        state_after_second, second_emissions = apply_decisions(state_after_first, second_decisions, caused_by="sig-m0")
+        self.assertEqual(state_after_second["state"], "PROFILED")
+        self.assertEqual(second_emissions[0]["task_id"], "task.build_profile")
+
+    def test_decision_and_emission_contract_fields_for_workers(self) -> None:
+        fixture_path = Path(__file__).parent / "fixtures" / "m0_state_machine_config.json"
+        config = load_state_machine_config(fixture_path)
+        now = datetime(2026, 2, 6, 0, 0, tzinfo=timezone.utc)
+        entity_state = {"entity_id": "ent-55", "state": "SEEN", "track": "M0"}
+        features = {"ingestion": {"resolved_entity_id": "ent-55"}, "profile": {"handle": "p55", "confidence": 0.8}}
+
+        decisions = evaluate_gates(config, entity_state, features, now)
+        self.assertEqual(len(decisions), 1)
+        decision = decisions[0]
+        for attr in (
+            "gate_id",
+            "gate_version",
+            "from_state",
+            "to_state",
+            "passed",
+            "cooldown_active",
+            "cooldown_on",
+            "enqueue_tasks_on_pass",
+            "transition_attempted",
+        ):
+            self.assertTrue(hasattr(decision, attr))
+
+        attempted = decision.transition_attempted
+        self.assertEqual(attempted.gate_id, decision.gate_id)
+        self.assertIn("feature_snapshot", attempted.snapshot)
+        self.assertIn("entity_snapshot", attempted.snapshot)
+        self.assertIn("config_version", attempted.snapshot)
+        self.assertIn("gate_version", attempted.snapshot)
+        self.assertIn("timestamp", attempted.snapshot)
+
+        _, emissions = apply_decisions(entity_state, decisions, caused_by="sig-contract")
+        self.assertEqual(len(emissions), 1)
+        for key in ("kind", "task_id", "gate_id", "caused_by", "timestamp"):
+            self.assertIn(key, emissions[0])
+        self.assertEqual(emissions[0]["kind"], "task_enqueued")
+        self.assertEqual(emissions[0]["gate_id"], decision.gate_id)
+
     def test_deterministic_gate_evaluation(self) -> None:
         config = parse_state_machine_config(BASE_CONFIG)
         entity_state = {"state": "candidate", "track": "A"}
@@ -190,9 +259,12 @@ class GateTests(unittest.TestCase):
 
     def test_load_state_machine_config_uses_schemas_backend(self) -> None:
         class FakeSchemas:
+            seen_payload_type = None
+
             @staticmethod
-            def parse_state_machine_config(raw: str) -> dict:
-                if "config_version: sm.v2" not in raw:
+            def parse_state_machine_config(payload: dict) -> dict:
+                FakeSchemas.seen_payload_type = type(payload)
+                if payload.get("config_version") != "sm.v2":
                     raise ValueError("unexpected input")
                 return {
                     "config_version": "sm.v2",
@@ -214,19 +286,15 @@ class GateTests(unittest.TestCase):
 
         with mock.patch("metaspn_gates.config.importlib.import_module", return_value=FakeSchemas):
             with TemporaryDirectory() as tmp:
-                path = Path(tmp) / "config.yaml"
+                path = Path(tmp) / "config.json"
                 path.write_text(
-                    "config_version: sm.v2\n"
-                    "gates:\n"
-                    "  - gate_id: g1\n"
-                    "    version: '2'\n"
-                    "    from: start\n"
-                    "    to: next\n",
+                    '{"config_version":"sm.v2","gates":[{"gate_id":"g1","version":"2","from":"start","to":"next"}]}',
                     encoding="utf-8",
                 )
                 config = load_state_machine_config(path)
                 self.assertEqual(config.config_version, "sm.v2.validated")
                 self.assertEqual(config.gates[0].version, "2")
+                self.assertEqual(FakeSchemas.seen_payload_type, dict)
 
     def test_schemas_backend_available_helper(self) -> None:
         with mock.patch("metaspn_gates.config.importlib.import_module", return_value=object()):
@@ -267,6 +335,51 @@ class GateTests(unittest.TestCase):
             )
             self.assertTrue(FakeSchemas.called)
             self.assertEqual(config.config_version, "validated")
+
+    def test_load_state_machine_config_schema_parser_receives_mapping_not_raw(self) -> None:
+        class FakeSchemas:
+            @staticmethod
+            def parse_state_machine_config(payload: dict) -> dict:
+                if not isinstance(payload, dict):
+                    raise TypeError("payload must be mapping")
+                return payload
+
+            @staticmethod
+            def validate_state_machine_config(payload: dict) -> dict:
+                return payload
+
+        with mock.patch("metaspn_gates.config.importlib.import_module", return_value=FakeSchemas):
+            with TemporaryDirectory() as tmp:
+                path = Path(tmp) / "config.json"
+                path.write_text(
+                    '{"config_version":"sm.v1","gates":[{"gate_id":"g1","version":"1","from":"a","to":"b"}]}',
+                    encoding="utf-8",
+                )
+                config = load_state_machine_config(path)
+                self.assertEqual(config.gates[0].gate_id, "g1")
+
+    def test_real_schemas_backend_present_path_stays_stable(self) -> None:
+        spec = importlib.util.find_spec("metaspn_schemas")
+        if spec is None:
+            self.skipTest("metaspn_schemas is not installed in this environment")
+
+        backend = importlib.import_module("metaspn_schemas")
+        fixture_path = Path(__file__).parent / "fixtures" / "m0_state_machine_config.json"
+        payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+        parse_hook = getattr(backend, "parse_state_machine_config", None)
+        if callable(parse_hook):
+            with mock.patch.object(backend, "parse_state_machine_config", side_effect=TypeError("expects mapping")):
+                config = load_state_machine_config(fixture_path)
+        else:
+            # Older schemas builds may not expose the parse hook at package root.
+            config = load_state_machine_config(fixture_path)
+
+        self.assertEqual(config.config_version, payload["config_version"])
+        self.assertEqual(
+            {g.gate_id for g in config.gates},
+            {g["gate_id"] for g in payload["gates"]},
+        )
 
 
 if __name__ == "__main__":

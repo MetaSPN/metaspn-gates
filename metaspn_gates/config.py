@@ -49,24 +49,32 @@ def schemas_contract_available() -> bool:
     )
 
 
-def _call_parser(fn: Callable[..., Any], raw: str, path: Path) -> Any:
+def _call_parser(fn: Callable[..., Any], payload: Mapping[str, Any], path: Path) -> Any | None:
     last_exc: Exception | None = None
-    for args in ((raw, str(path)), (raw,), (str(path),), ()):
+    for args in ((payload,), (payload, str(path))):
         try:
             return fn(*args)
-        except TypeError as exc:
+        except Exception as exc:  # pragma: no cover - backend-defined exception types
             last_exc = exc
-    if last_exc is not None:
-        raise last_exc
+    # Degrade gracefully to caller fallback path when parser hook isn't compatible
+    # with gate config payload shape.
     return None
 
 
-def _parse_with_schemas_backend(raw: str, path: Path, backend: Any) -> Mapping[str, Any] | None:
+def _parse_with_schemas_backend(payload: Mapping[str, Any] | None, path: Path, backend: Any) -> Mapping[str, Any] | None:
     parse_fn = getattr(backend, SCHEMAS_PARSE_HOOK, None)
-    if not callable(parse_fn):
+    if not callable(parse_fn) or payload is None:
         return None
-    parsed = _call_parser(parse_fn, raw, path)
-    return _mapping_from_object(parsed)
+    parsed = _call_parser(parse_fn, payload, path)
+    mapping = _mapping_from_object(parsed)
+    if mapping is None:
+        return None
+
+    # Keep gate parsing stable: only accept backend parse results that look like
+    # the expected gate config shape.
+    if "config_version" in mapping and "gates" in mapping:
+        return mapping
+    return None
 
 
 def _validate_with_schemas_backend(payload: Mapping[str, Any], backend: Any) -> Mapping[str, Any]:
@@ -211,20 +219,25 @@ def load_state_machine_config(path: str | Path) -> StateMachineConfig:
 
     path = Path(path)
     raw = path.read_text(encoding="utf-8")
+    decoded_payload: Mapping[str, Any] | None = None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        parsed = None
+    if parsed is not None:
+        decoded_payload = _mapping_from_object(parsed)
 
     backend = _load_schemas_backend()
     payload: Mapping[str, Any] | None = None
     if backend is not None:
-        payload = _parse_with_schemas_backend(raw, path, backend)
+        payload = _parse_with_schemas_backend(decoded_payload, path, backend)
 
     if payload is None:
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError as exc:
+        if decoded_payload is None:
             raise ConfigError(
                 "Config parsing failed. Install metaspn-schemas for YAML parsing, or provide JSON content."
-            ) from exc
-        payload = _mapping_from_object(parsed)
+            )
+        payload = decoded_payload
 
     if payload is None or not isinstance(payload, Mapping):
         raise ConfigError("top-level config must be an object")

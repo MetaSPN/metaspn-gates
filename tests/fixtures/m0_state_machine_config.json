@@ -1,0 +1,56 @@
+{
+  "config_version": "m0.v1",
+  "gates": [
+    {
+      "gate_id": "m0.seen_to_observed",
+      "version": "1",
+      "track": "M0",
+      "from": "SEEN",
+      "to": "OBSERVED",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.entity_resolved",
+          "field": "ingestion.resolved_entity_id",
+          "op": "exists"
+        }
+      ],
+      "cooldown_seconds": 0,
+      "enqueue_tasks_on_pass": [
+        "task.capture_observation"
+      ],
+      "failure_taxonomy": {
+        "hr.entity_resolved": "missing_resolved_entity"
+      }
+    },
+    {
+      "gate_id": "m0.observed_to_profiled",
+      "version": "1",
+      "track": "M0",
+      "from": "OBSERVED",
+      "to": "PROFILED",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.profile_handle",
+          "field": "profile.handle",
+          "op": "exists"
+        }
+      ],
+      "soft_thresholds": [
+        {
+          "threshold_id": "st.profile_confidence",
+          "field": "profile.confidence",
+          "op": "gte",
+          "value": 0.7
+        }
+      ],
+      "min_soft_passed": 1,
+      "cooldown_seconds": 0,
+      "enqueue_tasks_on_pass": [
+        "task.build_profile"
+      ],
+      "failure_taxonomy": {
+        "hr.profile_handle": "missing_profile_handle"
+      }
+    }
+  ]
+}
