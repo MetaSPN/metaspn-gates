@@ -19,7 +19,8 @@ from .config import (
 from .evaluator import Evaluator, evaluate_gates
 from .schemas import schemas_available
 from .applier import apply_decisions
-from .explain import format_decision_trace
+from .explain import format_admin_decision_trace, format_decision_trace
+from .policy import PolicyDecision, evaluate_season1_policy
 from .learning import (
     AttemptOutcomeEvaluation,
     CalibrationProposal,
@@ -51,4 +52,7 @@ __all__ = [
     "evaluate_attempt_outcomes",
     "generate_calibration_proposals",
     "format_decision_trace",
+    "format_admin_decision_trace",
+    "PolicyDecision",
+    "evaluate_season1_policy",
 ]

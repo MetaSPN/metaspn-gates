@@ -31,3 +31,33 @@ def format_decision_trace(decisions: Iterable[GateDecision]) -> list[dict[str, A
 
     rows.sort(key=lambda r: (r["gate_id"], r["timestamp"]))
     return rows
+
+
+def format_admin_decision_trace(decisions: Iterable[GateDecision]) -> list[dict[str, Any]]:
+    """Returns admin audit rows with lifecycle and policy debugging context."""
+
+    rows: list[dict[str, Any]] = []
+    for decision in decisions:
+        attempted = decision.transition_attempted
+        snapshot = attempted.snapshot
+        rows.append(
+            {
+                "gate_id": decision.gate_id,
+                "gate_version": decision.gate_version,
+                "track": decision.track,
+                "from_state": decision.from_state,
+                "to_state": decision.to_state,
+                "passed": decision.passed,
+                "reason": decision.reason if decision.reason else ("passed" if decision.passed else "blocked"),
+                "failed_requirement_id": decision.failed_requirement_id,
+                "cooldown_active": decision.cooldown_active,
+                "cooldown_scope": decision.cooldown_scope,
+                "cooldown_scope_key": decision.cooldown_scope_key,
+                "snapshot_config_version": snapshot.get("config_version"),
+                "snapshot_gate_version": snapshot.get("gate_version"),
+                "timestamp": attempted.timestamp.isoformat(),
+            }
+        )
+
+    rows.sort(key=lambda r: (r["gate_id"], r["timestamp"]))
+    return rows

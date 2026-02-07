@@ -116,6 +116,35 @@ Demo progression:
 Digest explainability helper:
 
 - `format_decision_trace(decisions)` returns rows with `passed`, `blocked`, and `reason`.
+- `format_admin_decision_trace(decisions)` returns audit-focused rows for admin review
+  including gate versions, failed requirement ids, and cooldown scope context.
+
+## Season 1 Policy Support
+
+Season 1 fixture:
+
+- `/Users/leoguinan/MetaSPN/metaspn-gates/tests/fixtures/season1_state_machine_config.json`
+
+Season 1 lifecycle states:
+
+- `NOT_STARTED -> ACTIVE -> ENDED -> CLAIMABLE -> CLOSED`
+
+Season 1 policy checks:
+
+- `evaluate_season1_policy(entity_state, "stake")` is allowed only in `ACTIVE`
+- `evaluate_season1_policy(entity_state, "unstake")` is allowed only in `CLAIMABLE`
+- `evaluate_season1_policy(entity_state, "claim")` is allowed only in `CLAIMABLE`
+
+Season 1 founder heartbeat requirement:
+
+- Activation (`NOT_STARTED -> ACTIVE`) requires `features.founder.stake > 0`.
+
+Season 1 suppression/cooldown behavior:
+
+- Activation gate uses `cooldown_on="attempt"` with a 300-second cooldown, so repeated
+  activation checks are throttled deterministically even on failed attempts.
+- Suppression is handled through normal gate suppression fields where configured; a
+  suppressed gate returns reason `suppressed` and does not transition or emit tasks.
 
 ## Token Health Support
 

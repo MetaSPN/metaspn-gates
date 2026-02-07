@@ -1,0 +1,86 @@
+{
+  "config_version": "season1.v1",
+  "gates": [
+    {
+      "gate_id": "season1.not_started_to_active",
+      "version": "1",
+      "track": "SEASON1",
+      "from": "NOT_STARTED",
+      "to": "ACTIVE",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.founder_heartbeat_stake",
+          "field": "founder.stake",
+          "op": "gt",
+          "value": 0
+        }
+      ],
+      "cooldown_seconds": 300,
+      "cooldown_on": "attempt",
+      "enqueue_tasks_on_pass": ["season.activate"],
+      "failure_taxonomy": {
+        "hr.founder_heartbeat_stake": "founder_heartbeat_missing"
+      }
+    },
+    {
+      "gate_id": "season1.active_to_ended",
+      "version": "1",
+      "track": "SEASON1",
+      "from": "ACTIVE",
+      "to": "ENDED",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.season_end_reached",
+          "field": "season.end_reached",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "cooldown_seconds": 0,
+      "enqueue_tasks_on_pass": ["season.settle"],
+      "failure_taxonomy": {
+        "hr.season_end_reached": "season_end_not_reached"
+      }
+    },
+    {
+      "gate_id": "season1.ended_to_claimable",
+      "version": "1",
+      "track": "SEASON1",
+      "from": "ENDED",
+      "to": "CLAIMABLE",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.claim_window_open",
+          "field": "season.claim_window_open",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "cooldown_seconds": 0,
+      "enqueue_tasks_on_pass": ["season.open_claims"],
+      "failure_taxonomy": {
+        "hr.claim_window_open": "claim_window_closed"
+      }
+    },
+    {
+      "gate_id": "season1.claimable_to_closed",
+      "version": "1",
+      "track": "SEASON1",
+      "from": "CLAIMABLE",
+      "to": "CLOSED",
+      "hard_requirements": [
+        {
+          "requirement_id": "hr.close_ready",
+          "field": "season.close_ready",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "cooldown_seconds": 0,
+      "enqueue_tasks_on_pass": ["season.close"],
+      "failure_taxonomy": {
+        "hr.close_ready": "close_not_ready"
+      }
+    }
+  ]
+}
